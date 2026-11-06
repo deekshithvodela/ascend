@@ -26,17 +26,17 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Form state for combined Registration + Weigh-in
+  // Form state for combined Registration + Weigh-in (all fields optional)
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [sex, setSex] = useState<'M' | 'F'>('M');
   const [category, setCategory] = useState('Open');
-  const [bodyweight, setBodyweight] = useState<number>(75);
-  const [squatRack, setSquatRack] = useState<number>(12);
-  const [benchRack, setBenchRack] = useState<number>(10);
-  const [openSquat, setOpenSquat] = useState<number>(150);
-  const [openBench, setOpenBench] = useState<number>(100);
-  const [openDeadlift, setOpenDeadlift] = useState<number>(180);
+  const [bodyweight, setBodyweight] = useState<string>('');
+  const [squatRack, setSquatRack] = useState<string>('');
+  const [benchRack, setBenchRack] = useState<string>('');
+  const [openSquat, setOpenSquat] = useState<string>('');
+  const [openBench, setOpenBench] = useState<string>('');
+  const [openDeadlift, setOpenDeadlift] = useState<string>('');
 
   const categories = event.rulesSnapshot.categories || [
     { id: 'c1', name: 'Open', minBodyweightKg: 0, maxBodyweightKg: 300, sex: 'both', division: 'raw' },
@@ -50,31 +50,42 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName || !lastName) {
-      alert('Please enter first and last name.');
-      return;
-    }
+    const nextLot = athletes.length + 1;
+    const effectiveFirstName = firstName.trim() || `Lifter #${nextLot}`;
+    const effectiveLastName = lastName.trim() || '';
+    const bwNum = parseFloat(bodyweight);
+    const sqRackNum = parseInt(squatRack, 10);
+    const bpRackNum = parseInt(benchRack, 10);
+    const sqNum = parseFloat(openSquat);
+    const bpNum = parseFloat(openBench);
+    const dlNum = parseFloat(openDeadlift);
 
     await onRegisterAthlete({
-      firstName,
-      lastName,
+      firstName: effectiveFirstName,
+      lastName: effectiveLastName,
       sex,
       declaredWeightCategory: category,
       verifiedWeightCategory: category,
-      officialBodyweightKg: bodyweight > 0 ? bodyweight : undefined,
-      weighInStatus: bodyweight > 0 ? 'passed' : 'pending',
+      officialBodyweightKg: !isNaN(bwNum) && bwNum > 0 ? bwNum : undefined,
+      weighInStatus: !isNaN(bwNum) && bwNum > 0 ? 'passed' : 'pending',
       rackHeights: {
-        squatRackHeight: squatRack,
-        benchRackHeight: benchRack,
+        squatRackHeight: !isNaN(sqRackNum) ? sqRackNum : undefined,
+        benchRackHeight: !isNaN(bpRackNum) ? bpRackNum : undefined,
       },
-      openingSquatKg: openSquat,
-      openingBenchKg: openBench,
-      openingDeadliftKg: openDeadlift,
+      openingSquatKg: !isNaN(sqNum) && sqNum > 0 ? sqNum : undefined,
+      openingBenchKg: !isNaN(bpNum) && bpNum > 0 ? bpNum : undefined,
+      openingDeadliftKg: !isNaN(dlNum) && dlNum > 0 ? dlNum : undefined,
     });
 
     // Reset and close
     setFirstName('');
     setLastName('');
+    setBodyweight('');
+    setSquatRack('');
+    setBenchRack('');
+    setOpenSquat('');
+    setOpenBench('');
+    setOpenDeadlift('');
     setIsModalOpen(false);
   };
 
@@ -216,31 +227,33 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
               <span>Unified Athlete Registration & Weigh-In</span>
             </h3>
             <p className="text-xs text-slate-400 mb-5">
-              Enter participant identity, verified bodyweight, and opening platform attempts in a single step.
+              Enter participant identity, verified bodyweight, and opening platform attempts in a single step. All fields are optional.
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Names */}
+              {/* Names (Optional) */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">First Name</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    First Name <span className="text-[10px] text-slate-500 font-normal">(optional)</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Marcus"
+                    placeholder="e.g. Marcus"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:border-red-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Last Name</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Last Name <span className="text-[10px] text-slate-500 font-normal">(optional)</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Vance"
+                    placeholder="e.g. Vance"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:border-red-500"
                   />
                 </div>
@@ -280,7 +293,7 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
               <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2">
                 <div className="flex items-center space-x-2 text-xs font-bold text-red-400 uppercase tracking-wider">
                   <Scale className="w-4 h-4" />
-                  <span>Official Weigh-In Verification</span>
+                  <span>Official Weigh-In Verification <span className="text-[10px] text-slate-500 font-normal normal-case">(optional)</span></span>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-300 mb-1">Measured Bodyweight (kg)</label>
@@ -288,11 +301,9 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
                     <input
                       type="number"
                       step="0.05"
-                      min="30"
-                      max="300"
-                      required
+                      placeholder="e.g. 75"
                       value={bodyweight}
-                      onChange={(e) => setBodyweight(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setBodyweight(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm font-bold text-white focus:outline-none focus:border-red-500"
                     />
                     <span className="text-xs font-bold text-slate-400">KG</span>
@@ -303,24 +314,30 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
               {/* Rack Heights */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Squat Rack Height</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Squat Rack Height <span className="text-[10px] text-slate-500 font-normal">(optional)</span>
+                  </label>
                   <input
                     type="number"
                     min="1"
                     max="30"
+                    placeholder="e.g. 12"
                     value={squatRack}
-                    onChange={(e) => setSquatRack(parseInt(e.target.value, 10) || 1)}
+                    onChange={(e) => setSquatRack(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:border-red-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Bench Rack Height</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Bench Rack Height <span className="text-[10px] text-slate-500 font-normal">(optional)</span>
+                  </label>
                   <input
                     type="number"
                     min="1"
                     max="30"
+                    placeholder="e.g. 10"
                     value={benchRack}
-                    onChange={(e) => setBenchRack(parseInt(e.target.value, 10) || 1)}
+                    onChange={(e) => setBenchRack(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:border-red-500"
                   />
                 </div>
@@ -330,7 +347,7 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
               <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2">
                 <div className="flex items-center space-x-2 text-xs font-bold text-slate-300 uppercase tracking-wider">
                   <Dumbbell className="w-4 h-4 text-red-500" />
-                  <span>Opening Attempt Declarations</span>
+                  <span>Opening Attempt Declarations <span className="text-[10px] text-slate-500 font-normal normal-case">(optional)</span></span>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
@@ -338,8 +355,9 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
                     <input
                       type="number"
                       step="2.5"
+                      placeholder="e.g. 140"
                       value={openSquat}
-                      onChange={(e) => setOpenSquat(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setOpenSquat(e.target.value)}
                       className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs font-bold text-white text-center focus:outline-none focus:border-red-500"
                     />
                   </div>
@@ -348,8 +366,9 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
                     <input
                       type="number"
                       step="2.5"
+                      placeholder="e.g. 100"
                       value={openBench}
-                      onChange={(e) => setOpenBench(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setOpenBench(e.target.value)}
                       className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs font-bold text-white text-center focus:outline-none focus:border-red-500"
                     />
                   </div>
@@ -358,8 +377,9 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
                     <input
                       type="number"
                       step="2.5"
+                      placeholder="e.g. 180"
                       value={openDeadlift}
-                      onChange={(e) => setOpenDeadlift(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setOpenDeadlift(e.target.value)}
                       className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs font-bold text-white text-center focus:outline-none focus:border-red-500"
                     />
                   </div>
@@ -389,3 +409,4 @@ export const AthleteRoster: React.FC<AthleteRosterProps> = ({
     </div>
   );
 };
+

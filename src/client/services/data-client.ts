@@ -112,6 +112,105 @@ export class DataClient {
     return TransactionalStore.getEvents();
   }
 
+  public static async getPublishedEvents(): Promise<CompetitionEvent[]> {
+    return TransactionalStore.getPublishedEvents();
+  }
+
+  public static async publishEvent(eventId: string): Promise<CompetitionEvent> {
+    const event = TransactionalStore.publishEvent(eventId);
+    if (!event) throw new Error('Event not found');
+
+    AuditService.log({
+      eventId,
+      entityType: 'event',
+      entityId: eventId,
+      action: 'EVENT_PUBLISHED',
+      previousValue: 'draft',
+      updatedValue: event.status,
+      actorId: 'meet_director',
+      actorRole: 'organizer',
+      reason: 'Competition published to public homepage',
+    });
+
+    this.saveToStorage();
+    return event;
+  }
+
+  public static async unpublishEvent(eventId: string): Promise<CompetitionEvent> {
+    const event = TransactionalStore.unpublishEvent(eventId);
+    if (!event) throw new Error('Event not found');
+
+    AuditService.log({
+      eventId,
+      entityType: 'event',
+      entityId: eventId,
+      action: 'EVENT_UNPUBLISHED',
+      previousValue: 'published',
+      updatedValue: 'unpublished',
+      actorId: 'meet_director',
+      actorRole: 'organizer',
+      reason: 'Competition hidden from public homepage',
+    });
+
+    this.saveToStorage();
+    return event;
+  }
+
+  public static async updateEventStatus(
+    eventId: string,
+    status: import('../../core/types/competition').EventStatus
+  ): Promise<CompetitionEvent> {
+    const event = TransactionalStore.updateEventStatus(eventId, status);
+    if (!event) throw new Error('Event not found');
+
+    AuditService.log({
+      eventId,
+      entityType: 'event',
+      entityId: eventId,
+      action: 'EVENT_STATUS_UPDATED',
+      previousValue: null,
+      updatedValue: status,
+      actorId: 'meet_director',
+      actorRole: 'organizer',
+      reason: `Competition status updated to ${status}`,
+    });
+
+    this.saveToStorage();
+    return event;
+  }
+
+  public static async createEvent(data: Partial<CompetitionEvent>): Promise<CompetitionEvent> {
+    const newId = `evt-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 4)}`;
+    const newEvent: CompetitionEvent = {
+      id: newId,
+      name: data.name || 'New Powerlifting Competition',
+      date: data.date || new Date().toISOString().split('T')[0],
+      venue: data.venue || 'Platform 1',
+      organizer: data.organizer || 'Ascend Organizer',
+      status: 'draft',
+      isPublished: false,
+      rulesSnapshot: data.rulesSnapshot || TransactionalStore.getEvents()[0].rulesSnapshot,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    TransactionalStore.saveEvent(newEvent);
+    AuditService.log({
+      eventId: newEvent.id,
+      entityType: 'event',
+      entityId: newEvent.id,
+      action: 'EVENT_CREATED',
+      previousValue: null,
+      updatedValue: newEvent,
+      actorId: 'meet_director',
+      actorRole: 'organizer',
+      reason: 'Created new competition event in draft mode',
+    });
+
+    this.saveToStorage();
+    return newEvent;
+  }
+
   public static async updateRules(
     eventId: string,
     updatedRules: CompetitionRules
@@ -244,16 +343,17 @@ export class DataClient {
       eventId,
       lotNumber: data.lotNumber || nextLot,
       registrationNumber: data.registrationNumber || `REG-${nextLot}`,
-      firstName: data.firstName || 'First',
-      lastName: data.lastName || 'Last',
+      firstName: data.firstName?.trim() || `Lifter #${nextLot}`,
+      lastName: data.lastName?.trim() || '',
       birthDate: data.birthDate,
       sex: data.sex || 'M',
       ageCategory: data.ageCategory || 'open',
       equipmentDivision: data.equipmentDivision || 'raw',
       teamOrAffiliation: data.teamOrAffiliation,
       declaredWeightCategory: data.declaredWeightCategory || 'Open',
+      officialBodyweightKg: data.officialBodyweightKg,
       weighInRecords: [],
-      weighInStatus: 'pending',
+      weighInStatus: data.officialBodyweightKg ? 'passed' : 'pending',
       rackHeights: data.rackHeights || {},
       lifterStatus: 'active',
       createdAt: new Date().toISOString(),

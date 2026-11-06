@@ -30,7 +30,9 @@ export class TransactionalStore {
       date: '2024-07-20',
       venue: 'Metropolis Athletics Club, Platform 1',
       organizer: 'Ascend Lifting League',
-      status: 'in_progress',
+      status: 'live',
+      isPublished: true,
+      publishedAt: '2024-07-01T08:00:00Z',
       rulesSnapshot: JSON.parse(JSON.stringify(ASCEND_OPEN_PROFILE)),
       createdAt: '2024-07-01T08:00:00Z',
       updatedAt: '2024-07-20T10:00:00Z',
@@ -135,7 +137,9 @@ export class TransactionalStore {
       venue: 'National Sports Center, Main Arena',
       organizer: 'National Powerlifting Federation',
       chiefRefereeName: 'Chief Ref. Arthur Sterling',
-      status: 'in_progress',
+      status: 'published',
+      isPublished: true,
+      publishedAt: '2024-08-01T08:00:00Z',
       rulesSnapshot: JSON.parse(JSON.stringify(IPF_COMPETITION_PROFILE)),
       createdAt: '2024-08-01T08:00:00Z',
       updatedAt: '2024-09-15T10:00:00Z',
@@ -398,6 +402,48 @@ export class TransactionalStore {
 
   public static getEvents(): CompetitionEvent[] {
     return Array.from(this.events.values());
+  }
+
+  public static getPublishedEvents(): CompetitionEvent[] {
+    return Array.from(this.events.values()).filter(
+      (e) => e.isPublished || e.status === 'live' || e.status === 'published' || e.status === 'completed'
+    );
+  }
+
+  public static publishEvent(id: string): CompetitionEvent | undefined {
+    const event = this.events.get(id);
+    if (!event) return undefined;
+    event.isPublished = true;
+    event.status = event.status === 'draft' ? 'published' : event.status;
+    event.publishedAt = new Date().toISOString();
+    event.updatedAt = new Date().toISOString();
+    this.events.set(id, event);
+    return event;
+  }
+
+  public static unpublishEvent(id: string): CompetitionEvent | undefined {
+    const event = this.events.get(id);
+    if (!event) return undefined;
+    event.isPublished = false;
+    event.status = 'unpublished';
+    event.updatedAt = new Date().toISOString();
+    this.events.set(id, event);
+    return event;
+  }
+
+  public static updateEventStatus(id: string, status: import('../core/types/competition').EventStatus): CompetitionEvent | undefined {
+    const event = this.events.get(id);
+    if (!event) return undefined;
+    event.status = status;
+    if (status === 'published' || status === 'live' || status === 'completed') {
+      event.isPublished = true;
+      if (!event.publishedAt) event.publishedAt = new Date().toISOString();
+    } else if (status === 'draft' || status === 'unpublished') {
+      event.isPublished = false;
+    }
+    event.updatedAt = new Date().toISOString();
+    this.events.set(id, event);
+    return event;
   }
 
   public static getEvent(id: string): CompetitionEvent | undefined {

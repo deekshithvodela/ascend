@@ -15,7 +15,10 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
-    CREATE TYPE event_status_enum AS ENUM ('draft', 'weigh_in', 'in_progress', 'finalized', 'locked');
+    CREATE TYPE event_status_enum AS ENUM (
+        'draft', 'published', 'live', 'completed', 'unpublished',
+        'weigh_in', 'in_progress', 'finalized', 'locked'
+    );
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
@@ -63,6 +66,8 @@ CREATE TABLE IF NOT EXISTS public.events (
     organizer TEXT NOT NULL,
     chief_referee_name TEXT,
     status event_status_enum NOT NULL DEFAULT 'draft',
+    is_published BOOLEAN NOT NULL DEFAULT false,
+    published_at TIMESTAMPTZ,
     rules_snapshot JSONB NOT NULL,
     custom_modifications JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
@@ -183,16 +188,38 @@ ALTER TABLE public.attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.referee_votes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
--- 5.1 Public Read-Only Access (Live Spectator Leaderboards & Sheets)
-CREATE POLICY "Public Spectator Read Events" ON public.events FOR SELECT USING (true);
-CREATE POLICY "Public Spectator Read Athletes" ON public.athletes FOR SELECT USING (true);
-CREATE POLICY "Public Spectator Read WeighIn" ON public.weigh_in_records FOR SELECT USING (true);
-CREATE POLICY "Public Spectator Read Attempts" ON public.attempts FOR SELECT USING (true);
-CREATE POLICY "Public Spectator Read Votes" ON public.referee_votes FOR SELECT USING (true);
-CREATE POLICY "Public Spectator Read Audit" ON public.audit_logs FOR SELECT USING (true);
+-- 5.1 Public Read-Only Access (Restricted to Published / Live / Completed Competitions)
+-- Draft and unpublished events remain strictly private and hidden from public visitors
+CREATE POLICY "Public Spectator Read Published Events" ON public.events FOR SELECT USING (
+    is_published = true OR status IN ('published', 'live', 'completed')
+);
 
--- 5.2 Authenticated Official Mutation Access
--- Meet Directors and Referees can insert/update events, attempts, votes, weigh-ins
+CREATE POLICY "Public Spectator Read Published Athletes" ON public.athletes FOR SELECT USING (
+    EXISTS (
+        SELECT 1 FROM public.events e
+        WHERE e.id = athletes.event_id
+        AND (e.is_published = true OR e.status IN ('published', 'live', 'completed'))
+    )
+);
+
+CREATE POLICY "Public Spectator Read Published Attempts" ON public.attempts FOR SELECT USING (
+    EXISTS (
+        SELECT 1 FROM public.events e
+        WHERE e.id = attempts.event_id
+        AND (e.is_published = true OR e.status IN ('published', 'live', 'completed'))
+    )
+);
+
+CREATE POLICY "Public Spectator Read Published Votes" ON public.referee_votes FOR SELECT USING (
+    EXISTS (
+        SELECT 1 FROM public.events e
+        WHERE e.id = referee_votes.event_id
+        AND (e.is_published = true OR e.status IN ('published', 'live', 'completed'))
+    )
+);
+
+-- 5.2 Authenticated Official Access (Full Management of Assigned Competitions)
+CREATE POLICY "Officials Read All Events" ON public.events FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Officials Insert Events" ON public.events FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "Officials Update Events" ON public.events FOR UPDATE TO authenticated USING (true);
 
@@ -201,7 +228,8 @@ CREATE POLICY "Officials Manage WeighIn" ON public.weigh_in_records FOR ALL TO a
 CREATE POLICY "Officials Manage Attempts" ON public.attempts FOR ALL TO authenticated USING (true);
 CREATE POLICY "Officials Manage Votes" ON public.referee_votes FOR ALL TO authenticated USING (true);
 
--- 5.3 Audit Logs are Strictly Append-Only (NO UPDATE, NO DELETE)
+-- 5.3 Audit Logs are Strictly Private to Authenticated Officials (NO PUBLIC ACCESS, NO MUTATION)
+CREATE POLICY "Officials Read Audit" ON public.audit_logs FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Officials Insert Audit" ON public.audit_logs FOR INSERT TO authenticated WITH CHECK (true);
 
 -- ==============================================================================

@@ -128,7 +128,16 @@ export interface CompetitionRules {
   lockOnFinalization: boolean;
 }
 
-export type EventStatus = 'draft' | 'weigh_in' | 'in_progress' | 'finalized' | 'locked';
+export type EventStatus =
+  | 'draft'
+  | 'published'
+  | 'live'
+  | 'completed'
+  | 'unpublished'
+  | 'in_progress'
+  | 'weigh_in'
+  | 'finalized'
+  | 'locked';
 
 export interface CompetitionEvent {
   id: string;
@@ -138,6 +147,8 @@ export interface CompetitionEvent {
   organizer: string;
   chiefRefereeName?: string;
   status: EventStatus;
+  isPublished?: boolean;
+  publishedAt?: string;
   rulesSnapshot: CompetitionRules;
   customModifications?: Record<string, any>;
   createdAt: string;

@@ -3,44 +3,59 @@
 ## Project Identity
 - **Project Name:** Ascend Powerlifting Competition Management Platform
 - **Purpose:** Modular powerlifting competition management platform supporting flexible Ascend Open mode, IPF-inspired federation competition mode, and custom rule profiles with full compliance, referee system, round-based scheduling, weigh-in, and audit trail.
-- **Current Phase:** Streamlined Release — Simple Dashboard, Unified Weigh-in, Delete Participant & Organizer Login
+- **Current Phase:** Public Homepage, Supabase Authentication, Real-Time Public Event Pages, Live Weight Editing & Dashboard RLS
 - **Repository / Location:** `https://github.com/deekshithvodela/ascend` (`/home/drover/Projects/Powerlifting`)
-- **Technology Stack:** TypeScript, React 18, Vite, Tailwind CSS, Lucide Icons, Express / Node.js API, PostgreSQL / Supabase, Vitest, GitHub Actions
-- **Live Deployment URL:** `https://deekshithvodela.github.io/ascend/`
+- **Technology Stack:** TypeScript, React 18, React Router (HashRouter), Vite, Tailwind CSS, Lucide Icons, Supabase JS & Realtime, Express / Node.js API, PostgreSQL / Supabase, Vitest, GitHub Actions
+- **Live Deployment URL:** `https://deekshithvodela.github.io/ascend/#/`
 - **Database Backend:** Supabase PostgreSQL (`https://texqrojyxrfwxzirgsmx.supabase.co`)
 - **License:** MIT License (`LICENSE`)
 
 ## Project Goal
-Build Ascend as a modular competition management platform that supports different powerlifting competition formats, from informal open competitions to professional federation-style competitions:
-1. **Simple, Intuitive Live Meet Dashboard:**
-   - Always-active platform card with independent steppers: Next/Prev Lifter (with dropdown), Next/Prev Lift (Squat/Bench/Deadlift), Next/Prev Attempt (#1/#2/#3).
-   - Working 1-click action buttons on card: `[⚪ Good Lift]`, `[🔴 No Lift]`, `[Next Lifter ►]`.
-   - Barbell plate breakdown visualizer with colored discs and quick weight steppers (`-2.5kg`, `+2.5kg`, `+5kg`).
-2. **General Organizer Login:**
-   - Prominent login modal in Header with instant 1-click "Log in as Meet Organizer / Director" or Supabase credentials.
-   - Dual-mode: Full Organizer Mode vs Read-only Spectator/Participant View.
-3. **Unified Registration + Weigh-In (No Separate Round):**
-   - Single-step participant entry form combining Name, Sex, Category, Verified Bodyweight (kg), Squat & Bench Rack Heights, and Opening Attempt declarations.
-4. **Delete Participant Feature:**
-   - Dedicated Delete (`Trash`) button on each participant row to remove lifters and their attempts from the competition.
-5. **Clean 3-Tab Interface:**
-   - Platform (Live Meet), Participants & Registration, Results & Standings.
+Build Ascend as a modular competition management platform with a public-facing portal and secure management architecture:
+1. **Public Homepage (`/#/`):**
+   - Shows ongoing published and live competitions dynamically fetched from Supabase / DataClient.
+   - Event cards with Name, Date, Venue, Status (Live / Published / Completed) and "View Live Event" link.
+   - Prominent Organizer Login button.
+2. **Supabase Authentication (`/#/login`):**
+   - Direct email & password authentication via Supabase Auth (`supabase.auth.signInWithPassword`).
+   - Session persistence across page refreshes.
+   - Protected dashboard routes preventing unauthorized access.
+3. **Authenticated Management Dashboard (`/#/dashboard`):**
+   - Competition management for authorized directors: create, edit, publish/unpublish, and finalize meets.
+   - Quick publishing toggles (`Draft` ↔ `Published` / `Live`).
+   - Dedicated "Open Meet Console" linking to `/#/dashboard/events/:eventId`.
+4. **Public Read-Only Event Page (`/#/event/:eventId`):**
+   - Strictly read-only public view with zero admin, judging, or editing controls.
+   - Live on-platform lifter, attempt number, weight, colored barbell plate breakdown, referee lights.
+   - Real-time updates via Supabase Realtime subscriptions.
+   - Live leaderboard standings with category filters and printable official sheets.
+5. **Real-Time Lift Weight Editing & Atomic Judging:**
+   - Real-time editable weight input on the platform card with instant plate calculation and steppers (`-5`, `-2.5`, `+2.5`, `+5`).
+   - Atomic attempt declaration and consensus judging so results auto-update immediately.
+6. **Strict Database Row-Level Security (RLS):**
+   - Public visitors restricted to `SELECT` only on published/live/completed events, athletes, and attempts.
+   - Draft and unpublished events remain strictly private.
+   - Mutation operations strictly restricted to authenticated officials.
 
 ## Current State
 - All 32 automated unit and integration tests passing (`npm test`).
-- Production client bundle built cleanly in 2.90s (`dist/assets/index-DByQoP8W.js`).
-- Pre-push safeguards active (`.gitignore`, subpath `/ascend/`, SPA route decoder).
-- Pushed to `main` at `git@github.com:deekshithvodela/ascend.git`.
+- Production client bundle built cleanly in 2.52s (`dist/assets/index-BSdGZsK4.js`, `dist/assets/index-DXjQKw7-.css`).
+- Prominent "+ Add Participant" button added directly to the competition platform dashboard and toolbar.
+- Quick Add Participant modal enabled directly on the platform with auto-selection of newly added lifters.
+- All registration options made completely non-mandatory with zero blocking validation or alerts.
+- Directly editable weight number (`<input>` styled identically to the 7xl red display) on the live meet stage.
+- Leaderboard enhanced with full Gender filtering (`All`, `Men (M)`, `Women (F)`) and interactive Discipline sorting (`Squat`, `Bench Press`, `Deadlift`, `Total`, `Ratio`, `DOTS`).
 
 ## Architecture
-- `src/client/components/platform/PlatformConsole.tsx` — Streamlined live meet dashboard with working steppers and card decisions.
-- `src/client/components/athletes/AthleteRoster.tsx` — Unified registration + weigh-in + participant deletion.
-- `src/client/components/auth/LoginModal.tsx` — General organizer login and spectator mode toggle.
-- `src/client/components/layout/Header.tsx` — Streamlined 3-tab navigation with Organizer badge.
-- `src/client/services/data-client.ts` — Universal dual-mode data layer with static in-browser fallback and persistence.
-- `src/server/store.ts` — Transactional memory store with `deleteAthlete` and initial seed data.
+- `src/client/pages/HomePage.tsx` — Public homepage displaying live, published, and completed competitions.
+- `src/client/pages/LoginPage.tsx` — Supabase Auth login page with master fallback.
+- `src/client/pages/DashboardPage.tsx` — Protected management dashboard with publishing controls and competition creation modal.
+- `src/client/pages/PublicEventPage.tsx` — Public read-only event page with real-time Supabase subscription and barbell visualizer.
+- `src/client/components/platform/PlatformConsole.tsx` — Meet platform console with real-time weight editing and atomic attempt judging.
+- `src/client/App.tsx` — Full HashRouter routing connecting public and authenticated routes.
+- `docs/SUPABASE_SCHEMA.sql` — Production PostgreSQL schema with Row-Level Security (RLS) policies.
 
 ## Verification Status
 - Full Test Suite: PASS (32 tests passing across 8 test suites).
 - TypeScript & Vite Production Build: PASS.
-- Production Endpoint: `https://deekshithvodela.github.io/ascend/`.
+- Production Endpoint: `https://deekshithvodela.github.io/ascend/#/`.
