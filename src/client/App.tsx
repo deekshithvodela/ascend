@@ -12,14 +12,24 @@ import { Athlete } from '../core/types/athlete';
 import { Attempt, RefereeRole, RefereeDecision, LiftType } from '../core/types/attempt';
 import { CompetitionResults } from '../core/types/ranking';
 import { AuditLogEntry } from '../core/types/audit';
+import { DataClient } from './services/data-client';
+import { TransactionalStore } from '../server/store';
 
 export const App: React.FC = () => {
-  const [events, setEvents] = useState<CompetitionEvent[]>([]);
-  const [activeEventId, setActiveEventId] = useState<string>('');
+  // Initialize with seed data to ensure zero render delay on static hosts
+  const [events, setEvents] = useState<CompetitionEvent[]>(() => TransactionalStore.getEvents());
+  const [activeEventId, setActiveEventId] = useState<string>(() => {
+    const evts = TransactionalStore.getEvents();
+    return evts.length > 0 ? evts[0].id : 'evt-ascend-open';
+  });
   const [activeTab, setActiveTab] = useState<string>('rules');
 
-  const [athletes, setAthletes] = useState<Athlete[]>([]);
-  const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [athletes, setAthletes] = useState<Athlete[]>(() =>
+    TransactionalStore.getAthletes('evt-ascend-open')
+  );
+  const [attempts, setAttempts] = useState<Attempt[]>(() =>
+    TransactionalStore.getAttempts('evt-ascend-open')
+  );
   const [results, setResults] = useState<CompetitionResults | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
@@ -38,11 +48,12 @@ export const App: React.FC = () => {
 
   const fetchEvents = async () => {
     try {
-      const res = await fetch('/api/events');
-      const data = await res.json();
-      setEvents(data);
-      if (data.length > 0 && !activeEventId) {
-        setActiveEventId(data[0].id);
+      const data = await DataClient.getEvents();
+      if (data && data.length > 0) {
+        setEvents(data);
+        if (!activeEventId || !data.some((e) => e.id === activeEventId)) {
+          setActiveEventId(data[0].id);
+        }
       }
     } catch (err) {
       console.error('Error fetching events:', err);
@@ -51,18 +62,11 @@ export const App: React.FC = () => {
 
   const loadEventData = async (eventId: string) => {
     try {
-      const [athRes, attRes, resRes, logRes] = await Promise.all([
-        fetch(`/api/events/${eventId}/athletes`),
-        fetch(`/api/events/${eventId}/attempts`),
-        fetch(`/api/events/${eventId}/results`),
-        fetch(`/api/events/${eventId}/audit`),
-      ]);
-
       const [athData, attData, resData, logData] = await Promise.all([
-        athRes.json(),
-        attRes.json(),
-        resRes.json(),
-        logRes.json(),
+        DataClient.getAthletes(eventId),
+        DataClient.getAttempts(eventId),
+        DataClient.getResults(eventId),
+        DataClient.getAuditLogs(eventId),
       ]);
 
       setAthletes(athData);
@@ -74,34 +78,22 @@ export const App: React.FC = () => {
     }
   };
 
-  const currentEvent = events.find((e) => e.id === activeEventId);
+  const currentEvent = events.find((e) => e.id === activeEventId) || events[0];
 
   const handleUpdateRules = async (updatedRules: CompetitionRules) => {
     if (!currentEvent) return;
-    const res = await fetch(`/api/events/${currentEvent.id}/rules`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedRules),
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(errorData.errors?.join(', ') || errorData.error);
+    try {
+      const updated = await DataClient.updateRules(currentEvent.id, updatedRules);
+      setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+      await loadEventData(updated.id);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update rules');
     }
-
-    const { event } = await res.json();
-    setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
-    await loadEventData(event.id);
   };
 
   const handleFinalizeEvent = async () => {
     if (!currentEvent) return;
-    const res = await fetch(`/api/events/${currentEvent.id}/finalize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ finalizedBy: 'Technical Jury Controller' }),
-    });
-    const finalized = await res.json();
+    const finalized = await DataClient.finalizeEvent(currentEvent.id, 'Technical Jury Controller');
     setEvents((prev) => prev.map((e) => (e.id === finalized.id ? finalized : e)));
     await loadEventData(finalized.id);
   };
@@ -113,24 +105,21 @@ export const App: React.FC = () => {
     weightKg: number
   ) => {
     if (!currentEvent) return;
-    await fetch(`/api/events/${currentEvent.id}/attempts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ athleteId, liftType, attemptNumber, weightKg }),
+    await DataClient.declareAttempt(currentEvent.id, {
+      athleteId,
+      liftType,
+      attemptNumber,
+      weightKg,
     });
     await loadEventData(currentEvent.id);
   };
 
   const handleVote = async (role: RefereeRole, decision: RefereeDecision, infractions?: string[]) => {
     if (!currentEvent || !selectedAttemptId) return;
-    await fetch(`/api/events/${currentEvent.id}/attempts/${selectedAttemptId}/vote`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        refereeRole: role,
-        decision,
-        infractionReasonCodes: infractions,
-      }),
+    await DataClient.recordVote(currentEvent.id, selectedAttemptId, {
+      role,
+      decision,
+      infractions,
     });
     await loadEventData(currentEvent.id);
   };
@@ -141,10 +130,10 @@ export const App: React.FC = () => {
     reason: string
   ) => {
     if (!currentEvent || !selectedAttemptId) return;
-    await fetch(`/api/events/${currentEvent.id}/attempts/${selectedAttemptId}/override`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ overriddenDecision, authorizedBy, reason }),
+    await DataClient.recordOverride(currentEvent.id, selectedAttemptId, {
+      overriddenDecision,
+      authorizedBy,
+      reason,
     });
     await loadEventData(currentEvent.id);
   };
@@ -157,31 +146,24 @@ export const App: React.FC = () => {
     notes?: string
   ) => {
     if (!currentEvent) return;
-    await fetch(`/api/events/${currentEvent.id}/athletes/${athleteId}/weigh-in`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ measuredWeightKg, officialId, officialName, notes }),
+    await DataClient.recordWeighIn(currentEvent.id, athleteId, {
+      measuredWeightKg,
+      officialId,
+      officialName,
+      notes,
     });
     await loadEventData(currentEvent.id);
   };
 
   const handleUpdateRackHeights = async (athleteId: string, heights: any) => {
     if (!currentEvent) return;
-    await fetch(`/api/events/${currentEvent.id}/athletes/${athleteId}/rack-heights`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(heights),
-    });
+    await DataClient.updateRackHeights(currentEvent.id, athleteId, heights);
     await loadEventData(currentEvent.id);
   };
 
   const handleRegisterAthlete = async (data: Partial<Athlete>) => {
     if (!currentEvent) return;
-    await fetch(`/api/events/${currentEvent.id}/athletes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    await DataClient.registerAthlete(currentEvent.id, data);
     await loadEventData(currentEvent.id);
   };
 
@@ -252,6 +234,8 @@ export const App: React.FC = () => {
           <LeaderboardView
             event={currentEvent}
             results={results}
+            athletes={athletes}
+            attempts={attempts}
             onRefreshResults={() => loadEventData(currentEvent.id)}
           />
         )}
@@ -259,12 +243,16 @@ export const App: React.FC = () => {
         {activeTab === 'audit' && <AuditViewer logs={auditLogs} />}
       </main>
 
-      <footer className="border-t border-slate-800 bg-slate-900/50 py-4 text-center text-xs text-slate-500">
-        Ascend Competition Management Engine • Section 21 Compliance • IPF Rulebook Technical Reference (Non-Affiliated Standard Implementation)
+      <footer className="border-t border-slate-800 bg-slate-900/50 py-4 text-center text-xs text-slate-500 flex flex-wrap items-center justify-center gap-3">
+        <span>Ascend Competition Management Engine • Section 21 Compliance • IPF Rulebook Technical Reference</span>
+        <span className="text-slate-600">|</span>
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          Universal Client Active
+        </span>
       </footer>
     </div>
   );
 };
 
 export default App;
-

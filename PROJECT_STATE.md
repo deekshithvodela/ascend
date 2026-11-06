@@ -3,10 +3,11 @@
 ## Project Identity
 - **Project Name:** Ascend Powerlifting Competition Management Platform
 - **Purpose:** Modular powerlifting competition management platform supporting flexible Ascend Open mode, IPF-inspired federation competition mode, and custom rule profiles with full compliance, referee system, round-based scheduling, weigh-in, and audit trail.
-- **Current Phase:** Production Ready — Pre-Push Hardening Complete
+- **Current Phase:** Deployed to Production (Live)
 - **Repository / Location:** `https://github.com/deekshithvodela/ascend` (`/home/drover/Projects/Powerlifting`)
 - **Technology Stack:** TypeScript, React 18, Vite, Tailwind CSS, Lucide Icons, Express / Node.js API, PostgreSQL / Supabase, Vitest, GitHub Actions
-- **Deployment Environment:** GitHub Pages (`https://deekshithvodela.github.io/ascend/`) + Supabase (`https://texqrojyxrfwxzirgsmx.supabase.co`)
+- **Live Deployment URL:** `https://deekshithvodela.github.io/ascend/`
+- **Database Backend:** Supabase PostgreSQL (`https://texqrojyxrfwxzirgsmx.supabase.co`)
 - **License:** MIT License (`LICENSE`)
 
 ## Project Goal
@@ -19,14 +20,13 @@ Build Ascend as a modular competition management platform that supports differen
 6. **Cloud Deployment:** GitHub Actions CI/CD to GitHub Pages (`/ascend/`) backed by live Supabase PostgreSQL schema with RLS and atomic vote resolution.
 
 ## Current State
+- Codebase committed and pushed to `main` at `git@github.com:deekshithvodela/ascend.git`.
+- GitHub Actions workflow (`deploy.yml`) built and deployed the production release (`commit 5527593`).
+- **Live Production URL Verified:** `https://deekshithvodela.github.io/ascend/` returns HTTP 200 with all bundled JS/CSS assets loading cleanly.
 - Full modular rules engine implemented, tested, and passing all 32 automated tests.
-- Vite frontend bundle built and verified (`dist/assets/`).
+- Vite frontend bundle verified (`dist/assets/`).
 - MIT License added (`LICENSE`).
-- Pre-push safeguards implemented:
-  - [`.gitignore`](file:///home/drover/Projects/Powerlifting/.gitignore) protecting against committing `node_modules` and local artifacts.
-  - [`.github/workflows/deploy.yml`](file:///home/drover/Projects/Powerlifting/.github/workflows/deploy.yml) updated with default `/ascend/` path and Supabase key fallbacks.
-  - [`index.html`](file:///home/drover/Projects/Powerlifting/index.html) updated with GitHub Pages SPA routing decoder.
-- Supabase credentials and base path wired into `.env` and `.env.production`.
+- Supabase credentials wired into `.env` and `.env.production`.
 - Red accent theme active across all 6 main UI modules.
 - Dynamic 1-referee and 2-attempt meet configuration verified.
 - 6 official sheets and CSV exports verified (Weigh-in sheet, Score sheet, Referee records, CSV results, CSV weigh-in).
@@ -67,11 +67,12 @@ Build Ascend as a modular competition management platform that supports differen
 
 ## Verification Status
 - Full Test Suite: PASS (32 tests passing across 8 test suites).
-- TypeScript & Vite Production Build: PASS with base path `/ascend/` (`dist/assets/index-Ke0CUYyF.js`, `dist/assets/index-DqmF65at.css`).
-- Local Server Hosting: ACTIVE (`http://localhost:3001` serving frontend SPA & REST API).
+- TypeScript & Vite Production Build: PASS with base path `/ascend/`.
+- GitHub Deployment: SUCCESS (`https://github.com/deekshithvodela/ascend/actions/runs/42140931817`).
+- Production Endpoint: HTTP 200 OK (`https://deekshithvodela.github.io/ascend/`).
+- Local Server Hosting: ACTIVE (`http://localhost:3001`).
 - License: VERIFIED (`LICENSE` MIT).
 - Supabase Integration: WIRED (`.env` & `src/core/services/supabase.ts`).
-- Pre-Push Hardening: COMPLETE ([`.gitignore`](file:///home/drover/Projects/Powerlifting/.gitignore), [`.github/workflows/deploy.yml`](file:///home/drover/Projects/Powerlifting/.github/workflows/deploy.yml), [`index.html`](file:///home/drover/Projects/Powerlifting/index.html)).
 
 ## Next Direction
-- Ready for remote git push to `https://github.com/deekshithvodela/ascend`.
+- Project deployment is live and complete.

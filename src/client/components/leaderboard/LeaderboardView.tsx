@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
 import { AthleteStanding, CompetitionResults } from '../../../core/types/ranking';
 import { CompetitionEvent } from '../../../core/types/competition';
+import { Athlete } from '../../../core/types/athlete';
+import { Attempt } from '../../../core/types/attempt';
+import { CsvExporter } from '../../../core/official-results/csv-exporter';
+import { OfficialSheetsGenerator } from '../../../core/official-results/sheets';
 import { Trophy, Download, Printer, Filter, Award, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface LeaderboardViewProps {
   event: CompetitionEvent;
   results: CompetitionResults | null;
+  athletes?: Athlete[];
+  attempts?: Attempt[];
   onRefreshResults: () => Promise<void>;
 }
 
 export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   event,
   results,
+  athletes = [],
+  attempts = [],
   onRefreshResults,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -32,11 +40,63 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
       : results.categoryStandings[selectedCategory] || [];
 
   const handleDownloadCsv = (type: 'results' | 'weighin') => {
-    window.open(`/api/events/${event.id}/sheets/csv-${type}`, '_blank');
+    let csvContent = '';
+    let filename = '';
+    if (type === 'results') {
+      csvContent = CsvExporter.exportStandingsToCsv(displayedStandings);
+      filename = `${event.name.replace(/\s+/g, '_')}_Results.csv`;
+    } else {
+      csvContent = CsvExporter.exportWeighInToCsv(athletes);
+      filename = `${event.name.replace(/\s+/g, '_')}_WeighIn.csv`;
+    }
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleOpenSheet = (sheetType: string) => {
-    window.open(`/api/events/${event.id}/sheets/${sheetType}`, '_blank');
+    let sheetHtml = '';
+    if (sheetType === 'weigh-in') {
+      sheetHtml = OfficialSheetsGenerator.renderWeighInSheet(event, athletes);
+    } else if (sheetType === 'score-sheet') {
+      sheetHtml = OfficialSheetsGenerator.renderScoreSheet(event, displayedStandings);
+    } else if (sheetType === 'referee-records') {
+      sheetHtml = OfficialSheetsGenerator.renderRefereeDecisions(event, attempts, athletes);
+    }
+
+    if (sheetHtml) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>${event.name} - ${sheetType}</title>
+              <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #111; }
+                table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+                th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 11px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; }
+                td { padding: 6px 8px; font-size: 12px; border-bottom: 1px solid #e2e8f0; }
+                @media print {
+                  body { padding: 0; }
+                }
+              </style>
+            </head>
+            <body>
+              ${sheetHtml}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+    }
   };
 
   return (
