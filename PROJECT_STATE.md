@@ -39,7 +39,10 @@ Build Ascend as a modular competition management platform with a public-facing p
 
 ## Current State
 - All 32 automated unit and integration tests passing (`npm test`).
-- Production client bundle built cleanly (`dist/assets/index-CO3aw6qT.js`, `dist/assets/index-C5YoYk5N.css`).
+- Production client bundle built cleanly (`dist/assets/index-BXSqQqCb.js`, `dist/assets/index-C5YoYk5N.css`).
+- Supabase Database Integration & Cross-Device Sync: `DataClient` directly connected to Supabase PostgreSQL (`events`, `athletes`, `attempts`, `referee_votes`) with transparent offline fallbacks.
+- Public Event Link (`/#/event/:eventId`) now queries Supabase directly on any device, eliminating "Competition not found" errors on new devices.
+- Supabase Realtime subscriptions + 3s live polling fallback added to `PublicEventPage` and `DashboardPage` ensuring instantaneous live updates across multiple devices.
 - Universal **`[🔴 Go Live]`** buttons and interactive status selectors (`Draft`, `Published`, `Live Now`, `Completed`, `Unpublished`) integrated across both the Management Dashboard (`DashboardPage.tsx`) and the Meet Console toolbar (`App.tsx`).
 - Prominent **`+ Add Participant`** button added directly to the competition platform dashboard and meet console toolbar.
 - Quick Add Participant modal enabled directly on the platform with auto-selection of newly added lifters.

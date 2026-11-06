@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { CompetitionEvent, EventStatus } from '../../core/types/competition';
 import { DataClient } from '../services/data-client';
-import { SupabaseService } from '../../core/services/supabase';
+import { SupabaseService, supabase } from '../../core/services/supabase';
 import { ASCEND_OPEN_PROFILE } from '../../core/competition-profiles/ascend-open.profile';
 import { IPF_COMPETITION_PROFILE } from '../../core/competition-profiles/ipf-technical.profile';
 import {
@@ -53,6 +53,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       return;
     }
     loadEvents();
+
+    // Supabase Realtime synchronization for events
+    const channel = supabase
+      .channel('dashboard-events-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'events' },
+        () => {
+          loadEvents();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isOrganizer, navigate]);
 
   const loadEvents = async () => {

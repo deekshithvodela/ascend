@@ -14,8 +14,154 @@ import { DeadlineTracker } from '../../core/attempt-scheduler/deadline-tracker';
 import { RulesDependencyValidator } from '../../core/rules-engine/validator';
 import { RuleSnapshotManager } from '../../core/rules-engine/versioning';
 import { AuditService } from '../../core/audit-trail/audit-service';
+import { supabase } from '../../core/services/supabase';
 
 const STORAGE_KEY = 'ascend_powerlifting_data_v1';
+
+// ----------------------------------------------------
+// Supabase <-> Domain Data Mappers
+// ----------------------------------------------------
+function eventFromSupabase(row: any): CompetitionEvent {
+  return {
+    id: row.id,
+    name: row.name,
+    date: typeof row.date === 'string' ? row.date.split('T')[0] : row.date,
+    venue: row.venue,
+    organizer: row.organizer,
+    chiefRefereeName: row.chief_referee_name || undefined,
+    status: row.status,
+    isPublished: Boolean(row.is_published),
+    publishedAt: row.published_at || undefined,
+    rulesSnapshot: row.rules_snapshot,
+    customModifications: row.custom_modifications || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    finalizedAt: row.finalized_at || undefined,
+    finalizedBy: row.finalized_by || undefined,
+  };
+}
+
+function eventToSupabase(event: CompetitionEvent): any {
+  return {
+    id: event.id,
+    name: event.name,
+    date: event.date,
+    venue: event.venue,
+    organizer: event.organizer,
+    chief_referee_name: event.chiefRefereeName || null,
+    status: event.status,
+    is_published: event.isPublished ?? (event.status === 'published' || event.status === 'live'),
+    published_at: event.publishedAt || (event.isPublished ? new Date().toISOString() : null),
+    rules_snapshot: event.rulesSnapshot,
+    custom_modifications: event.customModifications || {},
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function athleteFromSupabase(row: any): Athlete {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    lotNumber: row.lot_number,
+    registrationNumber: row.registration_number,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    birthDate: row.birth_date || undefined,
+    sex: row.sex,
+    ageCategory: row.age_category,
+    equipmentDivision: row.equipment_division,
+    teamOrAffiliation: row.team_or_affiliation || undefined,
+    declaredWeightCategory: row.declared_weight_category,
+    verifiedWeightCategory: row.verified_weight_category || undefined,
+    officialBodyweightKg: row.official_bodyweight_kg != null ? parseFloat(row.official_bodyweight_kg) : undefined,
+    weighInRecords: [],
+    weighInStatus: row.weigh_in_status || 'pending',
+    rackHeights: {
+      squatRackHeight: row.squat_rack_height != null ? row.squat_rack_height : undefined,
+      benchRackHeight: row.bench_rack_height != null ? row.bench_rack_height : undefined,
+      squatSafetyPin: row.squat_safety_pin != null ? row.squat_safety_pin : undefined,
+      benchSafetyPin: row.bench_safety_pin != null ? row.bench_safety_pin : undefined,
+    },
+    lifterStatus: row.lifter_status || 'active',
+    statusReason: row.status_reason || undefined,
+    flight: row.flight || 'Flight A',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function athleteToSupabase(athlete: Athlete): any {
+  return {
+    id: athlete.id,
+    event_id: athlete.eventId,
+    lot_number: athlete.lotNumber,
+    registration_number: athlete.registrationNumber,
+    first_name: athlete.firstName,
+    last_name: athlete.lastName,
+    birth_date: athlete.birthDate || null,
+    sex: athlete.sex,
+    age_category: athlete.ageCategory,
+    equipment_division: athlete.equipmentDivision,
+    team_or_affiliation: athlete.teamOrAffiliation || null,
+    declared_weight_category: athlete.declaredWeightCategory,
+    verified_weight_category: athlete.verifiedWeightCategory || null,
+    official_bodyweight_kg: athlete.officialBodyweightKg ?? null,
+    weigh_in_status: athlete.weighInStatus || 'pending',
+    squat_rack_height: athlete.rackHeights?.squatRackHeight ?? null,
+    bench_rack_height: athlete.rackHeights?.benchRackHeight ?? null,
+    squat_safety_pin: athlete.rackHeights?.squatSafetyPin ?? null,
+    bench_safety_pin: athlete.rackHeights?.benchSafetyPin ?? null,
+    lifter_status: athlete.lifterStatus || 'active',
+    status_reason: athlete.statusReason || null,
+    flight: athlete.flight || 'Flight A',
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function attemptFromSupabase(row: any, votes: any[] = []): Attempt {
+  return {
+    id: row.id,
+    athleteId: row.athlete_id,
+    liftType: row.lift_type,
+    attemptNumber: row.attempt_number,
+    weightKg: parseFloat(row.weight_kg),
+    status: row.status || 'pending',
+    refereeVotes: (votes || []).map((v) => ({
+      refereeId: v.referee_id,
+      refereeName: v.referee_name || `${v.referee_role?.toUpperCase()} Referee`,
+      refereeRole: v.referee_role,
+      decision: v.decision,
+      infractionReasonCodes: v.infraction_reason_codes || [],
+      timestamp: v.created_at,
+    })),
+    majorityDecision: row.majority_decision || undefined,
+    isJuryOverride: Boolean(row.is_jury_override),
+    juryOverrideBy: row.jury_override_by || undefined,
+    juryOverrideReason: row.jury_override_reason || undefined,
+    declaredAt: row.declared_at,
+    declarationChangeCount: row.declaration_change_count || 0,
+    timestamp: row.updated_at,
+  };
+}
+
+function attemptToSupabase(attempt: Attempt, eventId: string): any {
+  return {
+    id: attempt.id,
+    athlete_id: attempt.athleteId,
+    event_id: eventId,
+    lift_type: attempt.liftType,
+    attempt_number: attempt.attemptNumber,
+    weight_kg: attempt.weightKg,
+    status: attempt.status,
+    majority_decision: attempt.majorityDecision || null,
+    is_jury_override: Boolean(attempt.isJuryOverride),
+    jury_override_by: attempt.juryOverrideBy || null,
+    jury_override_reason: attempt.juryOverrideReason || null,
+    declared_at: attempt.declaredAt || new Date().toISOString(),
+    declaration_change_count: attempt.declarationChangeCount || 0,
+    updated_at: new Date().toISOString(),
+  };
+}
 
 export class DataClient {
   private static isStaticMode: boolean | null = null;
@@ -109,11 +255,101 @@ export class DataClient {
       }
     }
 
+    // Try fetching live/all events from Supabase
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        data.forEach((row) => {
+          const ev = eventFromSupabase(row);
+          TransactionalStore.saveEvent(ev);
+        });
+        this.saveToStorage();
+      } else if (!error && Array.isArray(data) && data.length === 0) {
+        // If Supabase is totally empty, seed initial events asynchronously
+        const initialEvents = TransactionalStore.getEvents();
+        for (const ev of initialEvents) {
+          await supabase.from('events').upsert(eventToSupabase(ev));
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase getEvents fallback to local store:', err);
+    }
+
     return TransactionalStore.getEvents();
   }
 
   public static async getPublishedEvents(): Promise<CompetitionEvent[]> {
+    const hasBackend = await this.checkBackend();
+    if (hasBackend) {
+      try {
+        const res = await fetch('/api/events');
+        if (res.ok) {
+          const all: CompetitionEvent[] = await res.json();
+          return all.filter(
+            (e) => e.isPublished || e.status === 'published' || e.status === 'live' || e.status === 'completed'
+          );
+        }
+      } catch {
+        this.isStaticMode = true;
+      }
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .or('is_published.eq.true,status.in.(published,live,completed)')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const events = data.map(eventFromSupabase);
+        events.forEach((ev) => TransactionalStore.saveEvent(ev));
+        this.saveToStorage();
+        return events;
+      }
+    } catch (err) {
+      console.warn('Supabase getPublishedEvents fallback:', err);
+    }
+
     return TransactionalStore.getPublishedEvents();
+  }
+
+  public static async getEvent(eventId: string): Promise<CompetitionEvent | undefined> {
+    const hasBackend = await this.checkBackend();
+    if (hasBackend) {
+      try {
+        const res = await fetch(`/api/events/${eventId}`);
+        if (res.ok) {
+          const data = await res.json();
+          return data.event || data;
+        }
+      } catch {
+        this.isStaticMode = true;
+      }
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', eventId)
+        .maybeSingle();
+
+      if (!error && data) {
+        const ev = eventFromSupabase(data);
+        TransactionalStore.saveEvent(ev);
+        this.saveToStorage();
+        return ev;
+      }
+    } catch (err) {
+      console.warn('Supabase getEvent fallback:', err);
+    }
+
+    return TransactionalStore.getEvent(eventId);
   }
 
   public static async publishEvent(eventId: string): Promise<CompetitionEvent> {
@@ -133,6 +369,22 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Async sync to Supabase
+    try {
+      await supabase
+        .from('events')
+        .update({
+          is_published: true,
+          published_at: event.publishedAt || new Date().toISOString(),
+          status: event.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', eventId);
+    } catch (err) {
+      console.warn('Supabase publishEvent sync error:', err);
+    }
+
     return event;
   }
 
@@ -153,6 +405,20 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Async sync to Supabase
+    try {
+      await supabase
+        .from('events')
+        .update({
+          is_published: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', eventId);
+    } catch (err) {
+      console.warn('Supabase unpublishEvent sync error:', err);
+    }
+
     return event;
   }
 
@@ -176,6 +442,21 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Async sync to Supabase
+    try {
+      await supabase
+        .from('events')
+        .update({
+          status,
+          is_published: event.isPublished,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', eventId);
+    } catch (err) {
+      console.warn('Supabase updateEventStatus sync error:', err);
+    }
+
     return event;
   }
 
@@ -208,6 +489,18 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Persist to Supabase
+    try {
+      const payload = eventToSupabase(newEvent);
+      const { error } = await supabase.from('events').insert(payload);
+      if (error) {
+        console.warn('Supabase createEvent error:', error);
+      }
+    } catch (err) {
+      console.warn('Supabase createEvent sync error:', err);
+    }
+
     return newEvent;
   }
 
@@ -258,6 +551,20 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Async sync to Supabase
+    try {
+      await supabase
+        .from('events')
+        .update({
+          rules_snapshot: updatedRules,
+          updated_at: event.updatedAt,
+        })
+        .eq('id', event.id);
+    } catch (err) {
+      console.warn('Supabase updateRules sync error:', err);
+    }
+
     return event;
   }
 
@@ -312,6 +619,23 @@ export class DataClient {
       } catch {
         this.isStaticMode = true;
       }
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('athletes')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('lot_number', { ascending: true });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const athletes = data.map(athleteFromSupabase);
+        TransactionalStore.saveAthletes(eventId, athletes);
+        this.saveToStorage();
+        return athletes;
+      }
+    } catch (err) {
+      console.warn('Supabase getAthletes fallback:', err);
     }
 
     return TransactionalStore.getAthletes(eventId);
@@ -376,6 +700,18 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Persist to Supabase
+    try {
+      const payload = athleteToSupabase(newAthlete);
+      const { error } = await supabase.from('athletes').upsert(payload);
+      if (error) {
+        console.warn('Supabase registerAthlete error:', error);
+      }
+    } catch (err) {
+      console.warn('Supabase registerAthlete sync error:', err);
+    }
+
     return newAthlete;
   }
 
@@ -403,6 +739,13 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Async sync to Supabase
+    try {
+      await supabase.from('athletes').delete().eq('id', athleteId);
+    } catch (err) {
+      console.warn('Supabase deleteAthlete sync error:', err);
+    }
   }
 
   public static async recordWeighIn(
@@ -459,6 +802,21 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Async sync to Supabase
+    try {
+      await supabase
+        .from('athletes')
+        .update({
+          official_bodyweight_kg: payload.measuredWeightKg,
+          weigh_in_status: evaluation.status,
+          verified_weight_category: updatedAthlete.verifiedWeightCategory || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', athleteId);
+    } catch (err) {
+      console.warn('Supabase recordWeighIn sync error:', err);
+    }
   }
 
   public static async updateRackHeights(
@@ -483,6 +841,22 @@ export class DataClient {
     athletes[athleteIndex] = WeighInManager.updateRackHeights(athletes[athleteIndex], heights);
     TransactionalStore.saveAthletes(eventId, athletes);
     this.saveToStorage();
+
+    // Async sync to Supabase
+    try {
+      await supabase
+        .from('athletes')
+        .update({
+          squat_rack_height: heights.squatRackHeight ?? null,
+          bench_rack_height: heights.benchRackHeight ?? null,
+          squat_safety_pin: heights.squatSafetyPin ?? null,
+          bench_safety_pin: heights.benchSafetyPin ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', athleteId);
+    } catch (err) {
+      console.warn('Supabase updateRackHeights sync error:', err);
+    }
   }
 
   // ----------------------------------------------------
@@ -497,6 +871,23 @@ export class DataClient {
       } catch {
         this.isStaticMode = true;
       }
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('attempts')
+        .select('*, referee_votes(*)')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: true });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const attempts = data.map((row) => attemptFromSupabase(row, row.referee_votes));
+        TransactionalStore.saveAttempts(eventId, attempts);
+        this.saveToStorage();
+        return attempts;
+      }
+    } catch (err) {
+      console.warn('Supabase getAttempts fallback:', err);
     }
 
     return TransactionalStore.getAttempts(eventId);
@@ -533,6 +924,8 @@ export class DataClient {
         a.attemptNumber === payload.attemptNumber
     );
 
+    let targetAttempt: Attempt;
+
     if (existingIndex !== -1) {
       const existing = attempts[existingIndex];
       const validation = DeadlineTracker.validateAttemptChange(
@@ -549,6 +942,7 @@ export class DataClient {
       existing.weightKg = payload.weightKg;
       existing.declarationChangeCount = (existing.declarationChangeCount || 0) + 1;
       attempts[existingIndex] = existing;
+      targetAttempt = existing;
       TransactionalStore.saveAttempts(eventId, attempts);
 
       AuditService.log({
@@ -562,40 +956,47 @@ export class DataClient {
         actorRole: 'coach_or_lifter',
         reason: `Weight changed from ${prevWeight}kg to ${payload.weightKg}kg`,
       });
+    } else {
+      const newAttempt: Attempt = {
+        id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        athleteId: payload.athleteId,
+        liftType: payload.liftType,
+        attemptNumber: payload.attemptNumber,
+        weightKg: payload.weightKg,
+        status: 'pending',
+        refereeVotes: [],
+        declaredAt: new Date().toISOString(),
+        declarationChangeCount: 0,
+      };
 
-      this.saveToStorage();
-      return existing;
+      attempts.push(newAttempt);
+      targetAttempt = newAttempt;
+      TransactionalStore.saveAttempts(eventId, attempts);
+
+      AuditService.log({
+        eventId,
+        entityType: 'attempt',
+        entityId: newAttempt.id,
+        action: 'ATTEMPT_DECLARED',
+        previousValue: null,
+        updatedValue: newAttempt,
+        actorId: 'platform_manager',
+        actorRole: 'coach_or_lifter',
+        reason: `Attempt declared at ${payload.weightKg}kg`,
+      });
     }
 
-    const newAttempt: Attempt = {
-      id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      athleteId: payload.athleteId,
-      liftType: payload.liftType,
-      attemptNumber: payload.attemptNumber,
-      weightKg: payload.weightKg,
-      status: 'pending',
-      refereeVotes: [],
-      declaredAt: new Date().toISOString(),
-      declarationChangeCount: 0,
-    };
-
-    attempts.push(newAttempt);
-    TransactionalStore.saveAttempts(eventId, attempts);
-
-    AuditService.log({
-      eventId,
-      entityType: 'attempt',
-      entityId: newAttempt.id,
-      action: 'ATTEMPT_DECLARED',
-      previousValue: null,
-      updatedValue: newAttempt,
-      actorId: 'platform_manager',
-      actorRole: 'coach_or_lifter',
-      reason: `Attempt declared at ${payload.weightKg}kg`,
-    });
-
     this.saveToStorage();
-    return newAttempt;
+
+    // Persist attempt to Supabase
+    try {
+      const supabasePayload = attemptToSupabase(targetAttempt, eventId);
+      await supabase.from('attempts').upsert(supabasePayload);
+    } catch (err) {
+      console.warn('Supabase declareAttempt sync error:', err);
+    }
+
+    return targetAttempt;
   }
 
   public static async recordVote(
@@ -672,6 +1073,30 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Async sync to Supabase (upsert vote & update attempt status)
+    try {
+      await supabase.from('referee_votes').upsert({
+        attempt_id: attempt.id,
+        event_id: eventId,
+        referee_id: vote.refereeId,
+        referee_name: vote.refereeName,
+        referee_role: vote.refereeRole,
+        decision: vote.decision,
+        infraction_reason_codes: vote.infractionReasonCodes || [],
+      });
+
+      await supabase
+        .from('attempts')
+        .update({
+          status: attempt.status,
+          majority_decision: attempt.majorityDecision || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', attempt.id);
+    } catch (err) {
+      console.warn('Supabase recordVote sync error:', err);
+    }
   }
 
   public static async recordOverride(
@@ -721,6 +1146,23 @@ export class DataClient {
     });
 
     this.saveToStorage();
+
+    // Async sync to Supabase
+    try {
+      await supabase
+        .from('attempts')
+        .update({
+          status: attempt.status,
+          majority_decision: attempt.majorityDecision,
+          is_jury_override: true,
+          jury_override_by: payload.authorizedBy,
+          jury_override_reason: payload.reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', attempt.id);
+    } catch (err) {
+      console.warn('Supabase recordOverride sync error:', err);
+    }
   }
 
   // ----------------------------------------------------
@@ -738,11 +1180,22 @@ export class DataClient {
     }
 
     // Static In-Browser
-    const event = TransactionalStore.getEvent(eventId);
+    let event = TransactionalStore.getEvent(eventId);
+    if (!event) {
+      event = await this.getEvent(eventId);
+    }
     if (!event) throw new Error('Event not found');
 
-    const athletes = TransactionalStore.getAthletes(eventId);
-    const attempts = TransactionalStore.getAttempts(eventId);
+    let athletes = TransactionalStore.getAthletes(eventId);
+    if (athletes.length === 0) {
+      athletes = await this.getAthletes(eventId);
+    }
+
+    let attempts = TransactionalStore.getAttempts(eventId);
+    if (attempts.length === 0) {
+      attempts = await this.getAttempts(eventId);
+    }
+
     const isFinalized = event.status === 'finalized' || event.status === 'locked';
 
     const categoryStandings = CategoryRanker.rankByCategories(

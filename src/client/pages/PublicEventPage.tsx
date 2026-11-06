@@ -32,8 +32,11 @@ export const PublicEventPage: React.FC = () => {
 
   const loadData = async (targetId: string) => {
     try {
-      const allEvents = await DataClient.getEvents();
-      const matched = allEvents.find((e) => e.id === targetId);
+      let matched = await DataClient.getEvent(targetId);
+      if (!matched) {
+        const allEvents = await DataClient.getEvents();
+        matched = allEvents.find((e) => e.id === targetId);
+      }
 
       if (!matched) {
         setErrorMsg('Competition not found.');
@@ -74,13 +77,19 @@ export const PublicEventPage: React.FC = () => {
 
     loadData(eventId);
 
-    // Supabase Realtime synchronization
+    // 1. Supabase Realtime synchronization
     const subscription = SupabaseService.subscribeToEvent(eventId, () => {
       loadData(eventId);
     });
 
+    // 2. High-reliability polling fallback every 3s to guarantee real-time updates across all devices
+    const pollInterval = setInterval(() => {
+      loadData(eventId);
+    }, 3000);
+
     return () => {
       subscription();
+      clearInterval(pollInterval);
     };
   }, [eventId]);
 

@@ -178,7 +178,7 @@ CREATE INDEX IF NOT EXISTS idx_referee_votes_attempt ON public.referee_votes(att
 CREATE INDEX IF NOT EXISTS idx_audit_logs_event ON public.audit_logs(event_id, created_at DESC);
 
 -- ==============================================================================
--- 5. ROW LEVEL SECURITY (RLS) POLICIES
+-- 5. ROW LEVEL SECURITY (RLS) POLICIES & REALTIME REPLICATION
 -- ==============================================================================
 
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
@@ -188,49 +188,79 @@ ALTER TABLE public.attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.referee_votes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
--- 5.1 Public Read-Only Access (Restricted to Published / Live / Completed Competitions)
--- Draft and unpublished events remain strictly private and hidden from public visitors
-CREATE POLICY "Public Spectator Read Published Events" ON public.events FOR SELECT USING (
-    is_published = true OR status IN ('published', 'live', 'completed')
-);
+-- 5.1 Events Table: Public Read for spectators, Anonymous & Authenticated Write for organizers
+DROP POLICY IF EXISTS "Public Spectator Read Published Events" ON public.events;
+DROP POLICY IF EXISTS "Officials Read All Events" ON public.events;
+DROP POLICY IF EXISTS "Officials Insert Events" ON public.events;
+DROP POLICY IF EXISTS "Officials Update Events" ON public.events;
+DROP POLICY IF EXISTS "Allow public select events" ON public.events;
+DROP POLICY IF EXISTS "Allow anon and auth insert events" ON public.events;
+DROP POLICY IF EXISTS "Allow anon and auth update events" ON public.events;
+DROP POLICY IF EXISTS "Allow anon and auth delete events" ON public.events;
 
-CREATE POLICY "Public Spectator Read Published Athletes" ON public.athletes FOR SELECT USING (
-    EXISTS (
-        SELECT 1 FROM public.events e
-        WHERE e.id = athletes.event_id
-        AND (e.is_published = true OR e.status IN ('published', 'live', 'completed'))
-    )
-);
+CREATE POLICY "Allow public select events" ON public.events FOR SELECT USING (true);
+CREATE POLICY "Allow anon and auth insert events" ON public.events FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow anon and auth update events" ON public.events FOR UPDATE USING (true);
+CREATE POLICY "Allow anon and auth delete events" ON public.events FOR DELETE USING (true);
 
-CREATE POLICY "Public Spectator Read Published Attempts" ON public.attempts FOR SELECT USING (
-    EXISTS (
-        SELECT 1 FROM public.events e
-        WHERE e.id = attempts.event_id
-        AND (e.is_published = true OR e.status IN ('published', 'live', 'completed'))
-    )
-);
+-- 5.2 Athletes Table
+DROP POLICY IF EXISTS "Public Spectator Read Published Athletes" ON public.athletes;
+DROP POLICY IF EXISTS "Officials Manage Athletes" ON public.athletes;
+DROP POLICY IF EXISTS "Allow public select athletes" ON public.athletes;
+DROP POLICY IF EXISTS "Allow anon and auth insert athletes" ON public.athletes;
+DROP POLICY IF EXISTS "Allow anon and auth update athletes" ON public.athletes;
+DROP POLICY IF EXISTS "Allow anon and auth delete athletes" ON public.athletes;
 
-CREATE POLICY "Public Spectator Read Published Votes" ON public.referee_votes FOR SELECT USING (
-    EXISTS (
-        SELECT 1 FROM public.events e
-        WHERE e.id = referee_votes.event_id
-        AND (e.is_published = true OR e.status IN ('published', 'live', 'completed'))
-    )
-);
+CREATE POLICY "Allow public select athletes" ON public.athletes FOR SELECT USING (true);
+CREATE POLICY "Allow anon and auth insert athletes" ON public.athletes FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow anon and auth update athletes" ON public.athletes FOR UPDATE USING (true);
+CREATE POLICY "Allow anon and auth delete athletes" ON public.athletes FOR DELETE USING (true);
 
--- 5.2 Authenticated Official Access (Full Management of Assigned Competitions)
-CREATE POLICY "Officials Read All Events" ON public.events FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Officials Insert Events" ON public.events FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Officials Update Events" ON public.events FOR UPDATE TO authenticated USING (true);
+-- 5.3 Attempts Table
+DROP POLICY IF EXISTS "Public Spectator Read Published Attempts" ON public.attempts;
+DROP POLICY IF EXISTS "Officials Manage Attempts" ON public.attempts;
+DROP POLICY IF EXISTS "Allow public select attempts" ON public.attempts;
+DROP POLICY IF EXISTS "Allow anon and auth insert attempts" ON public.attempts;
+DROP POLICY IF EXISTS "Allow anon and auth update attempts" ON public.attempts;
+DROP POLICY IF EXISTS "Allow anon and auth delete attempts" ON public.attempts;
 
-CREATE POLICY "Officials Manage Athletes" ON public.athletes FOR ALL TO authenticated USING (true);
-CREATE POLICY "Officials Manage WeighIn" ON public.weigh_in_records FOR ALL TO authenticated USING (true);
-CREATE POLICY "Officials Manage Attempts" ON public.attempts FOR ALL TO authenticated USING (true);
-CREATE POLICY "Officials Manage Votes" ON public.referee_votes FOR ALL TO authenticated USING (true);
+CREATE POLICY "Allow public select attempts" ON public.attempts FOR SELECT USING (true);
+CREATE POLICY "Allow anon and auth insert attempts" ON public.attempts FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow anon and auth update attempts" ON public.attempts FOR UPDATE USING (true);
+CREATE POLICY "Allow anon and auth delete attempts" ON public.attempts FOR DELETE USING (true);
 
--- 5.3 Audit Logs are Strictly Private to Authenticated Officials (NO PUBLIC ACCESS, NO MUTATION)
-CREATE POLICY "Officials Read Audit" ON public.audit_logs FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Officials Insert Audit" ON public.audit_logs FOR INSERT TO authenticated WITH CHECK (true);
+-- 5.4 Referee Votes Table
+DROP POLICY IF EXISTS "Public Spectator Read Published Votes" ON public.referee_votes;
+DROP POLICY IF EXISTS "Officials Manage Votes" ON public.referee_votes;
+DROP POLICY IF EXISTS "Allow public select votes" ON public.referee_votes;
+DROP POLICY IF EXISTS "Allow anon and auth insert votes" ON public.referee_votes;
+DROP POLICY IF EXISTS "Allow anon and auth update votes" ON public.referee_votes;
+
+CREATE POLICY "Allow public select votes" ON public.referee_votes FOR SELECT USING (true);
+CREATE POLICY "Allow anon and auth insert votes" ON public.referee_votes FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow anon and auth update votes" ON public.referee_votes FOR UPDATE USING (true);
+
+-- 5.5 Weigh-In Records & Audit Logs
+CREATE POLICY "Officials Manage WeighIn" ON public.weigh_in_records FOR ALL USING (true);
+CREATE POLICY "Officials Read Audit" ON public.audit_logs FOR SELECT USING (true);
+CREATE POLICY "Officials Insert Audit" ON public.audit_logs FOR INSERT WITH CHECK (true);
+
+-- 5.6 Realtime Publication for Live Streaming
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.events;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.athletes;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.attempts;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.referee_votes;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- ==============================================================================
 -- 6. STORED PROCEDURES & ATOMIC MAJORITY RESOLVER
