@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/layout/Header';
-import { RulesDashboard } from './components/rules-config/RulesDashboard';
 import { PlatformConsole } from './components/platform/PlatformConsole';
-import { RefereeConsole } from './components/referee/RefereeConsole';
-import { WeighInConsole } from './components/weigh-in/WeighInConsole';
+import { AthleteRoster } from './components/athletes/AthleteRoster';
 import { LeaderboardView } from './components/leaderboard/LeaderboardView';
+import { RulesDashboard } from './components/rules-config/RulesDashboard';
 import { AuditViewer } from './components/audit/AuditViewer';
+import { LoginModal } from './components/auth/LoginModal';
 
 import { CompetitionEvent, CompetitionRules } from '../core/types/competition';
 import { Athlete } from '../core/types/athlete';
@@ -22,7 +22,20 @@ export const App: React.FC = () => {
     const evts = TransactionalStore.getEvents();
     return evts.length > 0 ? evts[0].id : 'evt-ascend-open';
   });
-  const [activeTab, setActiveTab] = useState<string>('rules');
+
+  // Default to the intuitive meet platform
+  const [activeTab, setActiveTab] = useState<string>('platform');
+
+  // Organizer mode enabled by default so meet organizers can immediately test and run
+  const [isOrganizer, setIsOrganizer] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('ascend_is_organizer');
+      return stored !== null ? stored === 'true' : true;
+    }
+    return true;
+  });
+
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
 
   const [athletes, setAthletes] = useState<Athlete[]>(() =>
     TransactionalStore.getAthletes('evt-ascend-open')
@@ -124,53 +137,68 @@ export const App: React.FC = () => {
     await loadEventData(currentEvent.id);
   };
 
-  const handleJuryOverride = async (
-    overriddenDecision: RefereeDecision,
-    authorizedBy: string,
-    reason: string
-  ) => {
-    if (!currentEvent || !selectedAttemptId) return;
-    await DataClient.recordOverride(currentEvent.id, selectedAttemptId, {
-      overriddenDecision,
-      authorizedBy,
-      reason,
+  // Immediate consensus decision on the card
+  const handleQuickJudge = async (attemptId: string, decision: RefereeDecision) => {
+    if (!currentEvent) return;
+    await DataClient.recordVote(currentEvent.id, attemptId, {
+      role: 'chief',
+      decision,
+    });
+    await DataClient.recordVote(currentEvent.id, attemptId, {
+      role: 'left',
+      decision,
+    });
+    await DataClient.recordVote(currentEvent.id, attemptId, {
+      role: 'right',
+      decision,
     });
     await loadEventData(currentEvent.id);
   };
 
-  const handleRecordWeighIn = async (
-    athleteId: string,
-    measuredWeightKg: number,
-    officialId: string,
-    officialName: string,
-    notes?: string
+  const handleUnifiedRegisterAthlete = async (
+    data: Partial<Athlete> & {
+      openingSquatKg?: number;
+      openingBenchKg?: number;
+      openingDeadliftKg?: number;
+    }
   ) => {
     if (!currentEvent) return;
-    await DataClient.recordWeighIn(currentEvent.id, athleteId, {
-      measuredWeightKg,
-      officialId,
-      officialName,
-      notes,
-    });
+    const newAthlete = await DataClient.registerAthlete(currentEvent.id, data);
+
+    // Auto-declare opening attempts if provided
+    if (data.openingSquatKg) {
+      await DataClient.declareAttempt(currentEvent.id, {
+        athleteId: newAthlete.id,
+        liftType: 'squat',
+        attemptNumber: 1,
+        weightKg: data.openingSquatKg,
+      });
+    }
+    if (data.openingBenchKg) {
+      await DataClient.declareAttempt(currentEvent.id, {
+        athleteId: newAthlete.id,
+        liftType: 'bench_press',
+        attemptNumber: 1,
+        weightKg: data.openingBenchKg,
+      });
+    }
+    if (data.openingDeadliftKg) {
+      await DataClient.declareAttempt(currentEvent.id, {
+        athleteId: newAthlete.id,
+        liftType: 'deadlift',
+        attemptNumber: 1,
+        weightKg: data.openingDeadliftKg,
+      });
+    }
+
     await loadEventData(currentEvent.id);
   };
 
-  const handleUpdateRackHeights = async (athleteId: string, heights: any) => {
+  const handleDeleteAthlete = async (athleteId: string) => {
     if (!currentEvent) return;
-    await DataClient.updateRackHeights(currentEvent.id, athleteId, heights);
+    await DataClient.deleteAthlete(currentEvent.id, athleteId);
     await loadEventData(currentEvent.id);
   };
-
-  const handleRegisterAthlete = async (data: Partial<Athlete>) => {
-    if (!currentEvent) return;
-    await DataClient.registerAthlete(currentEvent.id, data);
-    await loadEventData(currentEvent.id);
-  };
-
-  const selectedAttempt = attempts.find((a) => a.id === selectedAttemptId);
-  const selectedAthlete = selectedAttempt
-    ? athletes.find((ath) => ath.id === selectedAttempt.athleteId)
-    : undefined;
 
   if (!currentEvent) {
     return <div className="p-8 text-center text-slate-400">Loading Ascend Platform...</div>;
@@ -182,54 +210,39 @@ export const App: React.FC = () => {
         currentEvent={currentEvent}
         events={events}
         activeTab={activeTab}
+        isOrganizer={isOrganizer}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
         onSelectTab={setActiveTab}
         onSelectEvent={setActiveEventId}
         onNewEvent={() => {}}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8">
-        {activeTab === 'rules' && (
-          <RulesDashboard
-            event={currentEvent}
-            onUpdateRules={handleUpdateRules}
-            onFinalizeEvent={handleFinalizeEvent}
-          />
-        )}
-
+        {/* 1. Live Platform Dashboard (Main Organizer View) */}
         {activeTab === 'platform' && (
           <PlatformConsole
             event={currentEvent}
             athletes={athletes}
             attempts={attempts}
-            onSelectAttemptForJudging={(attempt) => {
-              setSelectedAttemptId(attempt.id);
-              setActiveTab('referee');
-            }}
+            isOrganizer={isOrganizer}
             onDeclareAttempt={handleDeclareAttempt}
-          />
-        )}
-
-        {activeTab === 'referee' && (
-          <RefereeConsole
-            event={currentEvent}
-            attempt={selectedAttempt}
-            athlete={selectedAthlete}
             onVote={handleVote}
-            onJuryOverride={handleJuryOverride}
-            onClose={() => setActiveTab('platform')}
+            onQuickJudge={handleQuickJudge}
           />
         )}
 
-        {activeTab === 'weighin' && (
-          <WeighInConsole
+        {/* 2. Unified Participants & Registration & Delete */}
+        {activeTab === 'athletes' && (
+          <AthleteRoster
             event={currentEvent}
             athletes={athletes}
-            onRecordWeighIn={handleRecordWeighIn}
-            onUpdateRackHeights={handleUpdateRackHeights}
-            onRegisterAthlete={handleRegisterAthlete}
+            isOrganizer={isOrganizer}
+            onRegisterAthlete={handleUnifiedRegisterAthlete}
+            onDeleteAthlete={handleDeleteAthlete}
           />
         )}
 
+        {/* 3. Official Results & Leaderboard (Participant & Public View) */}
         {activeTab === 'leaderboard' && (
           <LeaderboardView
             event={currentEvent}
@@ -240,15 +253,36 @@ export const App: React.FC = () => {
           />
         )}
 
+        {/* 4. Technical Rules & Settings (Optional/Organizer) */}
+        {activeTab === 'rules' && (
+          <RulesDashboard
+            event={currentEvent}
+            onUpdateRules={handleUpdateRules}
+            onFinalizeEvent={handleFinalizeEvent}
+          />
+        )}
+
+        {/* 5. Immutable Audit Trail */}
         {activeTab === 'audit' && <AuditViewer logs={auditLogs} />}
       </main>
 
+      {/* Organizer Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        isOrganizer={isOrganizer}
+        onSetOrganizer={(org) => {
+          setIsOrganizer(org);
+          localStorage.setItem('ascend_is_organizer', org ? 'true' : 'false');
+        }}
+      />
+
       <footer className="border-t border-slate-800 bg-slate-900/50 py-4 text-center text-xs text-slate-500 flex flex-wrap items-center justify-center gap-3">
-        <span>Ascend Competition Management Engine • Section 21 Compliance • IPF Rulebook Technical Reference</span>
+        <span>Ascend Competition Engine • Section 21 Compliance</span>
         <span className="text-slate-600">|</span>
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-          Universal Client Active
+          {isOrganizer ? 'Organizer Mode Active' : 'Spectator / Participant View'}
         </span>
       </footer>
     </div>

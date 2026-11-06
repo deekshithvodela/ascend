@@ -279,6 +279,32 @@ export class DataClient {
     return newAthlete;
   }
 
+  public static async deleteAthlete(eventId: string, athleteId: string): Promise<void> {
+    const hasBackend = await this.checkBackend();
+    if (hasBackend) {
+      try {
+        await fetch(`/api/events/${eventId}/athletes/${athleteId}`, { method: 'DELETE' });
+      } catch {
+        // Fallback to client
+      }
+    }
+
+    TransactionalStore.deleteAthlete(eventId, athleteId);
+    AuditService.log({
+      eventId,
+      entityType: 'athlete',
+      entityId: athleteId,
+      action: 'ATHLETE_DELETED',
+      previousValue: athleteId,
+      updatedValue: null,
+      actorId: 'meet_director',
+      actorRole: 'organizer',
+      reason: 'Athlete removed from competition roster',
+    });
+
+    this.saveToStorage();
+  }
+
   public static async recordWeighIn(
     eventId: string,
     athleteId: string,
@@ -670,3 +696,4 @@ export class DataClient {
     return AuditService.getLogs(eventId);
   }
 }
+

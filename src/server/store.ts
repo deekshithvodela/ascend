@@ -423,5 +423,19 @@ export class TransactionalStore {
   public static saveAttempts(eventId: string, attempts: Attempt[]): void {
     this.attempts.set(eventId, attempts);
   }
+
+  public static deleteAthlete(eventId: string, athleteId: string): void {
+    const athletes = this.athletes.get(eventId) || [];
+    this.athletes.set(
+      eventId,
+      athletes.filter((a) => a.id !== athleteId)
+    );
+
+    const attempts = this.attempts.get(eventId) || [];
+    this.attempts.set(
+      eventId,
+      attempts.filter((a) => a.athleteId !== athleteId)
+    );
+  }
 }
 
