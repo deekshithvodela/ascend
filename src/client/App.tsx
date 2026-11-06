@@ -229,6 +229,16 @@ const EventManagementView: React.FC<{
     }
   };
 
+  const handleSetStatus = async (newStatus: import('../core/types/competition').EventStatus) => {
+    try {
+      const updated = await DataClient.updateEventStatus(event.id, newStatus);
+      setEvent(updated);
+      await loadData(updated.id);
+    } catch (err) {
+      console.error('Error updating event status:', err);
+    }
+  };
+
   const isLive = event.status === 'live';
   const isPublished = event.isPublished || event.status === 'published' || isLive;
 
@@ -271,20 +281,47 @@ const EventManagementView: React.FC<{
             </div>
 
             {/* Right Quick Controls */}
-            <div className="flex items-center space-x-2 sm:space-x-3">
-              {/* Publishing Status Toggle */}
-              <button
-                onClick={handleTogglePublish}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
-                  isPublished
-                    ? 'bg-blue-950 text-blue-300 border border-blue-800 hover:bg-blue-900/50'
-                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
-                }`}
-                title={isPublished ? 'Event is published publicly' : 'Event is hidden/draft'}
+            <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap">
+              {/* Go Live / Active Status Control */}
+              {isLive ? (
+                <div className="flex items-center space-x-1.5">
+                  <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-red-950 text-red-300 border border-red-700 text-xs font-black uppercase tracking-wider animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                    <span>LIVE ON PLATFORM</span>
+                  </span>
+                  <button
+                    onClick={() => handleSetStatus('completed')}
+                    className="px-2.5 py-1.5 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-200 text-xs font-bold border border-purple-800 transition"
+                    title="End competition and finalize results"
+                  >
+                    Finish Meet
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleSetStatus('live')}
+                  className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-red-600/30 transition flex items-center space-x-1.5 active:scale-95"
+                  title="Make this event LIVE on the platform and public homepage"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Go Live</span>
+                </button>
+              )}
+
+              {/* Status Switcher Dropdown */}
+              <select
+                aria-label="Change event status"
+                value={event.status}
+                onChange={(e) => handleSetStatus(e.target.value as any)}
+                className="bg-slate-900 text-xs text-slate-300 font-semibold px-2 py-1.5 rounded-lg border border-slate-700 outline-none cursor-pointer hover:border-slate-600 transition"
+                title="Switch competition state"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{isPublished ? 'Published' : 'Draft Mode'}</span>
-              </button>
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="live">Live Now</option>
+                <option value="completed">Completed</option>
+                <option value="unpublished">Unpublished</option>
+              </select>
 
               {/* View Public Page */}
               <Link
@@ -300,7 +337,7 @@ const EventManagementView: React.FC<{
               {/* Add Participant quick action */}
               <button
                 onClick={() => setActiveTab('athletes')}
-                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-red-600/30 active:scale-95"
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-red-600/20 active:scale-95"
                 title="Register and weigh-in participant"
               >
                 <UserPlus className="w-3.5 h-3.5" />

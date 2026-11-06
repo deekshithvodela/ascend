@@ -288,7 +288,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                             PUBLISHED
                           </span>
                         )}
-                        {ev.status === 'draft' && (
+                        {(ev.status === 'draft' || ev.status === 'weigh_in') && (
                           <span className="text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
                             DRAFT
                           </span>
@@ -298,9 +298,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                             COMPLETED
                           </span>
                         )}
-                        {ev.status === 'unpublished' && (
+                        {(ev.status === 'unpublished' || ev.status === 'in_progress') && (
                           <span className="text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800">
-                            UNPUBLISHED
+                            {ev.status === 'in_progress' ? 'PREPARING' : 'UNPUBLISHED'}
                           </span>
                         )}
 
@@ -327,39 +327,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
                     {/* Action Controls */}
                     <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
-                      {/* State Transition Steppers */}
-                      {ev.status === 'draft' || ev.status === 'unpublished' ? (
-                        <button
-                          onClick={() => handleTogglePublish(ev)}
-                          className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center space-x-1.5"
-                          title="Publish event to public homepage"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Publish</span>
-                        </button>
-                      ) : null}
-
-                      {ev.status === 'published' && (
-                        <>
-                          <button
-                            onClick={() => handleSetStatus(ev.id, 'live')}
-                            className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-red-600/30"
-                            title="Start competition live"
-                          >
-                            <Play className="w-3.5 h-3.5" />
-                            <span>Go Live</span>
-                          </button>
-                          <button
-                            onClick={() => handleTogglePublish(ev)}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition"
-                            title="Hide from public"
-                          >
-                            <span>Unpublish</span>
-                          </button>
-                        </>
-                      )}
-
-                      {ev.status === 'live' && (
+                      {/* 1. Universal Go Live / Finalize Action */}
+                      {isLive ? (
                         <button
                           onClick={() => handleSetStatus(ev.id, 'completed')}
                           className="px-3 py-1.5 rounded-lg bg-purple-900 hover:bg-purple-800 text-purple-200 text-xs font-bold transition flex items-center space-x-1.5"
@@ -368,9 +337,45 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Finalize</span>
                         </button>
+                      ) : (
+                        <button
+                          onClick={() => handleSetStatus(ev.id, 'live')}
+                          className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-red-600/30 transition flex items-center space-x-1.5 active:scale-95"
+                          title="Make this event LIVE on platform and public homepage"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Go Live</span>
+                        </button>
                       )}
 
-                      {/* Public View link if published */}
+                      {/* 2. Direct Status Switcher */}
+                      <select
+                        aria-label="Set competition status"
+                        value={ev.status}
+                        onChange={(e) => handleSetStatus(ev.id, e.target.value as any)}
+                        className="bg-slate-950 text-xs text-slate-300 font-semibold px-2.5 py-1.5 rounded-lg border border-slate-700 outline-none cursor-pointer hover:border-slate-600 transition"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="published">Published</option>
+                        <option value="live">Live Now</option>
+                        <option value="completed">Completed</option>
+                        <option value="unpublished">Unpublished</option>
+                      </select>
+
+                      {/* 3. Publish / Unpublish Quick Toggle */}
+                      <button
+                        onClick={() => handleTogglePublish(ev)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                          isPublished
+                            ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                            : 'bg-blue-600 hover:bg-blue-500 text-white border-blue-500 font-bold'
+                        }`}
+                        title={isPublished ? 'Hide from public homepage' : 'Publish to public homepage'}
+                      >
+                        {isPublished ? 'Unpublish' : 'Publish'}
+                      </button>
+
+                      {/* 4. Public View link if published */}
                       {isPublished && (
                         <Link
                           to={`/event/${ev.id}`}
@@ -383,7 +388,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         </Link>
                       )}
 
-                      {/* Primary Action: Open Meet Console */}
+                      {/* 5. Primary Action: Open Meet Console */}
                       <Link
                         to={`/dashboard/events/${ev.id}`}
                         className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-600/20 transition flex items-center space-x-1.5"

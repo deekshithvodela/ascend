@@ -39,11 +39,12 @@ Build Ascend as a modular competition management platform with a public-facing p
 
 ## Current State
 - All 32 automated unit and integration tests passing (`npm test`).
-- Production client bundle built cleanly in 2.52s (`dist/assets/index-BSdGZsK4.js`, `dist/assets/index-DXjQKw7-.css`).
-- Prominent "+ Add Participant" button added directly to the competition platform dashboard and toolbar.
+- Production client bundle built cleanly (`dist/assets/index-CO3aw6qT.js`, `dist/assets/index-C5YoYk5N.css`).
+- Universal **`[🔴 Go Live]`** buttons and interactive status selectors (`Draft`, `Published`, `Live Now`, `Completed`, `Unpublished`) integrated across both the Management Dashboard (`DashboardPage.tsx`) and the Meet Console toolbar (`App.tsx`).
+- Prominent **`+ Add Participant`** button added directly to the competition platform dashboard and meet console toolbar.
 - Quick Add Participant modal enabled directly on the platform with auto-selection of newly added lifters.
 - All registration options made completely non-mandatory with zero blocking validation or alerts.
-- Directly editable weight number (`<input>` styled identically to the 7xl red display) on the live meet stage.
+- Directly editable weight number (`<input>` styled identically to the 7xl red display with steppers and auto-plate calculation) on the live meet stage.
 - Leaderboard enhanced with full Gender filtering (`All`, `Men (M)`, `Women (F)`) and interactive Discipline sorting (`Squat`, `Bench Press`, `Deadlift`, `Total`, `Ratio`, `DOTS`).
 
 ## Architecture
